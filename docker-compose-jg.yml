@@ -1,0 +1,77 @@
+# Минимальная версия инфраструктуры на базе
+# OpenSearch
+# OpenSearch Dashboards
+# Fluent Bit
+
+version: '3'
+services:
+
+  opensearch:
+    container_name: opensearch
+    image: opensearchproject/opensearch:latest
+    environment:
+      - discovery.type=single-node
+      - http.port=9200
+      - bootstrap.memory_lock=true
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=adm-Password0
+    ports:
+      - '9200:9200'
+      - '9600:9600'
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -ku admin:adm-Password0 https://localhost:9200/_cluster/health?pretty | grep status | grep -q '\\(green\\|yellow\\)'"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+#    volumes:
+#      - opensearch-data:/usr/share/opensearch/data
+
+  dashboards:
+    image: opensearchproject/opensearch-dashboards:latest
+    container_name: opensearch-dashboards
+    ports:
+      - 5601:5601
+    expose:
+      - "5601"
+    environment:
+      OPENSEARCH_HOSTS: '["https://opensearch:9200"]'
+    depends_on:
+      - opensearch
+
+  jaeger-collector:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "14269:14269" # / health check and /metrics for prometheus
+      - "16685:16685" # gRPC	Protobuf/gRPC QueryService
+      - "16686:16686" # /api/* endpoints and Jaeger UI at /
+      - "16687:16687" # admin port: health check at / and metrics at /metrics
+    #      - "14268:14268"
+#      - "14267:14267"
+#      - "14250:14250"
+#      - "9411:9411"
+    restart: on-failure
+    environment:
+      - SPAN_STORAGE_TYPE=opensearch
+      - ES_TAGS_AS_FIELDS_ALL=true
+      - ES_USERNAME=admin
+      - ES_PASSWORD=adm-Password0
+      - ES_TLS_SKIP_HOST_VERIFY=true
+    command: [
+      "--es.server-urls=https://opensearch:9200",
+      "--es.tls.enabled=true",
+    ]
+    depends_on:
+      - opensearch
